@@ -4,38 +4,38 @@
 #define motlb 12
 #define motrf 25
 #define motrb 33
-// #define _DEBUG_
-
+#define _DEBUG_
 const int freqm = 5000; // motor pwm frequency
 const int mrfc = 0;     // Motor Right Forward Channel (mrfc)
 const int mrbc = 2;     // Motor Right Backward Channel (mrbc)
 const int mlfc = 4;     // Motor Left Forward Channel (mlfc)
 const int mlbc = 6;     //
 const int mpwmr = 8;    // motor pwm resolution(8bit)
+int rpwm = 0;           // pwm value to right motor
+int lpwm = 0;
 
-int turnspeed = 150;
-int threshold = 200;
-int basespeed = 190;
+int turnspeed = 210;
+int threshold = 500;
+int basespeed = 210;
+int minspeed = (0);
+int maxspeed = 255;
+int lmotspeed = 0;
+int rmotspeed = 0;
 
 bool oncenter = false;
 bool onleft = false;
 bool onright = false;
-int leftsensor = 17;
-int rightsensor = 34;
-int centersensor = 39;
-int center1sensor = 18;
-int farleftsensor = 4;
-int farrightsensor = 32;
+int leftsensor = 39;
+int rightsensor = 35;
+int centersensor = 34;
+int crspeed = 0;
+int clspeed = 0;
 int csval = 0;
 int lsval = 0;
 int rsval = 0;
 int error = 0;
-
-void fd();
-void rt();
-void lt();
-
-const int irPins[8] = {4, 16, 17, 18, 39, 34, 35, 32}; // Adjust according to your setup
+int lasterror = 0;
+int derror = 0;
 
 void setup()
 {
@@ -52,76 +52,61 @@ void setup()
   ledcWrite(mrbc, 0);
   ledcWrite(mlfc, 0);
   ledcWrite(mlbc, 0);
-  pinMode(centersensor, INPUT);
-  pinMode(leftsensor, INPUT);
-  pinMode(rightsensor, INPUT);
-  pinMode(center1sensor, INPUT);
-  pinMode(farleftsensor, INPUT);
-  pinMode(farrightsensor, INPUT);
-
+#ifdef _DEBUG_
+  Serial.begin(115200);
+#endif
 }
 void loop()
 {
-  if(digitalRead(centersensor) == HIGH && digitalRead(center1sensor) == HIGH){
-    oncenter = true;
-    error = 0;
-  }else{
-    oncenter = false;
-  }
-
-
-  if(digitalRead(leftsensor) == HIGH){
-    onleft = true;
-    error = -1;
-  }else{
-    onleft = false;
-  }
-
-  if(digitalRead(rightsensor) == HIGH){
-    onright = true;
-    error = 1;
-  }else{
-    onright = false;
-  }
-
-  if(digitalRead(farleftsensor) == HIGH){
-    onleft = true;
-    error = -1;
-  }else{
-    onleft = false;
-  }
-
-  if(digitalRead(farrightsensor) == HIGH){
-    onright = true;
-    error = 1;
-  }else{
-    onright = false;
-  }
-
-
+  csval = analogRead(centersensor);
+  lsval = analogRead(leftsensor);
+  rsval = analogRead(rightsensor);
+  csval > threshold ? oncenter = true : oncenter = false;
+  lsval > threshold ? onleft = true : onleft = false;
+  rsval > threshold ? onright = true : onright = false;
+  error = (rsval - lsval);
   if (oncenter == true && onleft == false && onright == false)
   {
     digitalWrite(LED_BUILTIN, HIGH);
 
-    fd();
-  }
-  else
-  {
+    crspeed = basespeed - error;
+    clspeed = basespeed + error;
+
+    crspeed > maxspeed ? crspeed = maxspeed : crspeed = crspeed;
+    crspeed < basespeed ? crspeed = basespeed : crspeed = crspeed;
+
+    clspeed < basespeed ? clspeed = basespeed : clspeed = clspeed;
+    clspeed > maxspeed ? clspeed = maxspeed : clspeed = clspeed;
+
+    ledcWrite(mrfc, crspeed);
+    ledcWrite(mrbc, 0);
+    ledcWrite(mlfc, clspeed);
+    ledcWrite(mlbc, 0);
+  }else{
     digitalWrite(LED_BUILTIN, LOW);
-
-    if (onleft == true && oncenter == false && onright == false)
-    {
-      lt();
-    }
-    if (onright == true && oncenter == false && onleft == false)
-    {
-
-      rt();
-    }
+  }
+  if (onleft == true && oncenter == false && onright == false)
+  {
+    ledcWrite(mrfc, turnspeed);
+    ledcWrite(mrbc, 0);
+    ledcWrite(mlfc, 0);
+    ledcWrite(mlbc, turnspeed);
+    derror = 1;
+  }
+  if (onright == true && oncenter == false && onleft == false)
+  {
+    ledcWrite(mrfc, 0);
+    ledcWrite(mrbc, turnspeed);
+    ledcWrite(mlfc, turnspeed);
+    ledcWrite(mlbc, 0);
+    derror = 2;
   }
   if (onright == true && oncenter == true && onleft == true)
   {
-    fd();
+    ledcWrite(mrfc, basespeed);
+    ledcWrite(mrbc, 0);
+    ledcWrite(mlfc, basespeed);
+    ledcWrite(mlbc, 0);
   }
   /*if (onleft == false && oncenter == false && onright == false)
   {
@@ -140,27 +125,14 @@ void loop()
       ledcWrite(mlbc, 0);
     }
   }*/
-
-}
-void fd()
-{
-  ledcWrite(mrfc, basespeed);
-  ledcWrite(mrbc, 0);
-  ledcWrite(mlfc, basespeed);
-  ledcWrite(mlbc, 0);
-}
-void rt()
-{
-  ledcWrite(mrfc, 0);
-  ledcWrite(mrbc, turnspeed);
-  ledcWrite(mlfc, turnspeed);
-  ledcWrite(mlbc, 0);
-}
-void lt()
-{
-
-  ledcWrite(mrfc, turnspeed);
-  ledcWrite(mrbc, 0);
-  ledcWrite(mlfc, 0);
-  ledcWrite(mlbc, turnspeed);
+#ifdef _DEBUG_
+  Serial.print(lsval);
+  Serial.print("\t");
+  Serial.print(csval);
+  Serial.print("\t");
+  Serial.print(rsval);
+  Serial.print("\t");
+  Serial.print(error);
+  Serial.println("\t");
+#endif
 }
